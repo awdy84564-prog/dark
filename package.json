@@ -2,6 +2,7 @@
   "name": "dark-chat-root",
   "version": "1.0.0",
   "description": "تطبيق شات صوتي وكتابي متكامل - نظام الإدارة العليا ROOT",
+  "license": "MIT",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
