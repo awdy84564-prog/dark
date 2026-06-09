@@ -9,68 +9,156 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.static(__dirname));
 
-let currentBroadcaster = null;
-const OWNER_NAME = "DARK CHAT";
-const OWNER_PASS = "DARK_CHAT_2026";
+const SUPER_ADMIN = "DARK CHAT";
+const SUPER_PASS = "DARK_CHAT_2026";
 
+let rooms = [
+    { id: "room1", name: "الديوانية العامة", activeUsers: 0, broadcaster: null, pass: "1111", bg: "", mods: [] },
+    { id: "room2", name: "غرفة المسابقات والفعاليات", activeUsers: 0, broadcaster: null, pass: "2222", bg: "", mods: [] },
+    { id: "room3", name: "جلسة طرب وعزف", activeUsers: 0, broadcaster: null, pass: "3333", bg: "", mods: [] }
+];
 io.on('connection', (socket) => {
-    socket.emit('init-state', {
-        hasBroadcaster: currentBroadcaster !== null,
-        broadcasterId: currentBroadcaster
-    });
+    socket.emit('init-rooms', rooms.map(r => ({ id: r.id, name: r.name, activeUsers: r.activeUsers })));
+
+    const updateRoomUsers = (roomId) => {
+        const clients = io.sockets.adapter.rooms.get(roomId);
+        const usersList = [];
+        if (clients) {
+            for (const clientId of clients) {
+                const clientSocket = io.sockets.sockets.get(clientId);
+                if (clientSocket && clientSocket.username) {
+                    usersList.push({ id: clientSocket.id, username: clientSocket.username, role: clientSocket.role });
+                }
+            }
+        }
+        io.to(roomId).emit('room-users-list', usersList);
+    };
 
     socket.on('join-chat', (data) => {
-        if (data.username === OWNER_NAME && data.password === OWNER_PASS) {
-            socket.username = OWNER_NAME;
-            socket.role = "OWNER";
-            socket.emit('role-assigned', { role: "OWNER" });
-            io.emit('sys-message', `👑 OWNER ${socket.username} has entered the room`);
-        } else {
-            socket.username = data.username || 'Guest';
-            socket.role = "USER";
-            socket.emit('role-assigned', { role: "USER" });
-            io.emit('sys-message', `👤 ${socket.username} joined the chat`);
+        const room = rooms.find(r => r.id === data.roomId);
+        if (!room) return;
+
+        let assignedRole = "USER";
+
+        if (data.username === SUPER_ADMIN && data.password === SUPER_PASS) {
+            assignedRole = "OWNER";
+        } else if (data.password === room.pass) {
+            assignedRole = "OWNER";
+        } else if (room.mods.includes(data.username)) {
+            assignedRole = "MOD";
         }
+
+        socket.username = data.username || 'زائر';
+        socket.role = assignedRole;
+        socket.currentRoom = data.roomId;
+        socket.join(data.roomId);
+        
+        room.activeUsers++;
+        io.emit('update-rooms', rooms.map(r => ({ id: r.id, name: r.name, activeUsers: r.activeUsers })));
+
+        socket.emit('role-assigned', { role: socket.role, roomName: room.name, bg: room.bg });
+        
+        let prefix = "👤 ";
+        if(socket.role === "OWNER") prefix = "👑 المالك ";
+        if(socket.role === "MOD") prefix = "👮 المشرف ";
+        
+        io.to(data.roomId).emit('sys-message', `${prefix} ${socket.username} انضم إلى الغرفة`);
+        updateRoomUsers(data.roomId);
+
+        if (room.broadcaster) socket.emit('mic-started');
     });
 
     socket.on('send-msg', (data) => {
-        io.emit('new-msg', {
-            user: socket.username || 'Guest',
-            role: socket.role || 'USER',
-            text: data.text
-        });
+        if (socket.currentRoom) {
+            io.to(socket.currentRoom).emit('new-msg', { user: socket.username, role: socket.role, text: data.text });
+        }
     });
 
     socket.on('start-mic', () => {
-        if (socket.role === "OWNER" && !currentBroadcaster) {
-            currentBroadcaster = socket.id;
-            socket.broadcast.emit('mic-started', socket.id);
-        } else if (socket.role !== "OWNER") {
-            socket.emit('sys-message', "❌ Only the Owner can use the mic");
+        const room = rooms.find(r => r.id === socket.currentRoom);
+        if (room && socket.role === "OWNER" && !room.broadcaster) {
+            room.broadcaster = socket.id;
+            socket.to(socket.currentRoom).emit('mic-started');
         }
     });
 
     socket.on('stop-mic', () => {
-        if (currentBroadcaster === socket.id) {
-            currentBroadcaster = null;
-            io.emit('mic-stopped');
+        const room = rooms.find(r => r.id === socket.currentRoom);
+        if (room && room.broadcaster === socket.id) {
+            room.broadcaster = null;
+            io.to(socket.currentRoom).emit('mic-stopped');
         }
     });
 
     socket.on('audio-data', (data) => {
-        if (currentBroadcaster === socket.id) {
-            socket.broadcast.emit('audio-stream', data);
+        const room = rooms.find(r => r.id === socket.currentRoom);
+        if (room && room.broadcaster === socket.id) {
+            socket.to(socket.currentRoom).emit('audio-stream', data);
+        }
+    });
+
+    socket.on('room-action', (data) => {
+        if (socket.role !== "OWNER") return;
+        const room = rooms.find(r => r.id === socket.currentRoom);
+        if (!room) return;
+
+        if (data.action === "clear") {
+            io.to(socket.currentRoom).emit('clear-chat');
+            io.to(socket.currentRoom).emit('sys-message', "🧹 تم مسح الحائط البرقي بواسطة إدارة الغرفة");
+        } else if (data.action === "rename") {
+            room.name = data.value;
+            io.to(socket.currentRoom).emit('room-renamed', data.value);
+            io.emit('update-rooms', rooms.map(r => ({ id: r.id, name: r.name, activeUsers: r.activeUsers })));
+        } else if (data.action === "bg") {
+            room.bg = data.value;
+            io.to(socket.currentRoom).emit('room-bg-changed', data.value);
+        } else if (data.action === "mod") {
+            const targetSocket = io.sockets.sockets.get(data.targetId);
+            if (targetSocket && targetSocket.currentRoom === socket.currentRoom) {
+                targetSocket.role = "MOD";
+                if(!room.mods.includes(targetSocket.username)) room.mods.push(targetSocket.username);
+                targetSocket.emit('role-assigned', { role: "MOD", roomName: room.name, bg: room.bg });
+                io.to(socket.currentRoom).emit('sys-message', `👮 تم ترقية ${targetSocket.username} إلى مشرف الغرفة`);
+                updateRoomUsers(socket.currentRoom);
+            }
+        }
+    });
+
+    socket.on('admin-update-rooms', (newRooms) => {
+        if (socket.username === SUPER_ADMIN && socket.role === "OWNER") {
+            rooms = newRooms.map(nr => {
+                const old = rooms.find(o => o.id === nr.id);
+                return {
+                    id: nr.id,
+                    name: nr.name,
+                    pass: nr.pass || (old ? old.pass : "1234"),
+                    bg: old ? old.bg : "",
+                    mods: old ? old.mods : [],
+                    activeUsers: old ? old.activeUsers : 0,
+                    broadcaster: old ? old.broadcaster : null
+                };
+            });
+            io.emit('update-rooms', rooms.map(r => ({ id: r.id, name: r.name, activeUsers: r.activeUsers })));
         }
     });
 
     socket.on('disconnect', () => {
-        if (socket.username) {
-            const prefix = socket.role === "OWNER" ? "👑 OWNER " : "👤 ";
-            io.emit('sys-message', `${prefix}${socket.username} left the chat`);
-        }
-        if (currentBroadcaster === socket.id) {
-            currentBroadcaster = null;
-            io.emit('mic-stopped');
+        if (socket.currentRoom) {
+            const roomId = socket.currentRoom;
+            const room = rooms.find(r => r.id === roomId);
+            if (room) {
+                room.activeUsers = Math.max(0, room.activeUsers - 1);
+                if (room.broadcaster === socket.id) {
+                    room.broadcaster = null;
+                    io.to(roomId).emit('mic-stopped');
+                }
+                io.emit('update-rooms', rooms.map(r => ({ id: r.id, name: r.name, activeUsers: r.activeUsers })));
+            }
+            if (socket.username) {
+                let prefix = socket.role === "OWNER" ? "👑 المالك " : (socket.role === "MOD" ? "👮 المشرف " : "👤 ");
+                io.to(roomId).emit('sys-message', `${prefix} ${socket.username} غادر الغرفة`);
+            }
+            updateRoomUsers(roomId);
         }
     });
 });
