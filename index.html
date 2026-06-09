@@ -1,146 +1,318 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DARK CHAT</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DARK CHAT | دارك شات</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: sans-serif; }
-        body { background-color: #0b0c10; color: #c5c6c7; height: 100vh; display: flex; justify-content: center; align-items: center; }
-        .screen { width: 100%; height: 100%; display: flex; flex-direction: column; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; touch-action: manipulation; }
+        body { background-color: #0b0c10; color: #c5c6c7; height: 100vh; display: flex; justify-content: center; align-items: center; overflow: hidden; position: relative; }
+        .screen { width: 100%; height: 100%; display: flex; flex-direction: column; position: relative; }
         .hidden { display: none !important; }
-        #login-screen { justify-content: center; align-items: center; background: radial-gradient(circle, #1f2833 0%, #0b0c10 100%); }
-        .card { background-color: #1f2833; padding: 30px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); text-align: center; width: 90%; max-width: 400px; }
-        h1 { color: #45f3ff; margin-bottom: 25px; letter-spacing: 2px; }
-        input[type="text"], input[type="password"] { width: 100%; padding: 12px 15px; background-color: #0b0c10; border: 1px solid #45f3ff; border-radius: 6px; color: #fff; font-size: 16px; outline: none; margin-bottom: 20px; }
-        button { width: 100%; padding: 12px; background-color: #45f3ff; border: none; border-radius: 6px; color: #0b0c10; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        #rooms-screen, #room-auth-screen { justify-content: center; align-items: center; background: radial-gradient(circle, #1f2833 0%, #0b0c10 100%); padding: 20px; z-index: 10; }
+        .card { background-color: #1f2833; padding: 25px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); text-align: center; width: 100%; max-width: 450px; border: 1px solid #1f2833; }
+        h1, h2, h3 { color: #45f3ff; margin-bottom: 20px; letter-spacing: 1px; }
+        input[type="text"], input[type="password"], select { width: 100%; padding: 12px 15px; background-color: #0b0c10; border: 1px solid #1f2833; border-radius: 6px; color: #fff; font-size: 16px; outline: none; margin-bottom: 15px; text-align: center; transition: 0.3s; }
+        input:focus, select:focus { border-color: #45f3ff; }
+        button { width: 100%; padding: 12px; background-color: #45f3ff; border: none; border-radius: 6px; color: #0b0c10; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; margin-bottom: 10px; }
         button:hover { background-color: #1f2833; color: #45f3ff; border: 1px solid #45f3ff; }
-        header { background-color: #1f2833; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #45f3ff; }
-        header h2 { color: #45f3ff; font-size: 20px; }
-        .mic-panel { display: flex; align-items: center; gap: 10px; }
-        .btn-mic { width: auto; padding: 8px 15px; font-size: 14px; }
+        button.secondary { background-color: #0b0c10; color: #888; border: 1px solid #1f2833; }
+        button.secondary:hover { color: #fff; border-color: #fff; }
+        button.danger { background-color: #ff4757; color: #fff; }
+        
+        .rooms-sidebar { position: absolute; top: 0; right: -100%; width: 290px; height: 100%; background-color: #151b23; box-shadow: -5px 0 25px rgba(0,0,0,0.7); transition: transform 0.3s cubic-bezier(0.1, 0.9, 0.2, 1); display: flex; flex-direction: column; padding: 20px; border-left: 2px solid #45f3ff; z-index: 99; transform: translateX(0); }
+        .rooms-sidebar.open { transform: translateX(-100%); }
+        .rooms-list { width: 100%; flex: 1; overflow-y: auto; margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px; }
+        .room-item { background-color: #0b0c10; border: 1px solid #1f2833; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .room-item:hover, .room-item.active { border-color: #45f3ff; background-color: #1f2833; }
+        .room-name { font-weight: bold; color: #fff; font-size: 14px; }
+        .room-counter { font-size: 11px; color: #45f3ff; background: rgba(69,243,255,0.1); padding: 3px 6px; border-radius: 10px; }
+        
+        header { background-color: #1f2833; padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #45f3ff; gap: 8px; }
+        header h2 { margin-bottom: 0; font-size: 15px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; }
+        .mic-panel { display: flex; align-items: center; gap: 6px; }
+        .btn-mic { width: auto; padding: 8px 10px; font-size: 12px; margin-bottom: 0; }
         .btn-mic.active { background-color: #ff4757; color: #fff; }
-        #mic-status { font-size: 14px; font-weight: bold; }
+        #mic-status { font-size: 11px; font-weight: bold; }
         .status-off { color: #888; }
         .status-on { color: #2ed573; }
         .status-live { color: #ff4757; }
-        .messages-area { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
-        .msg-box { background-color: #1f2833; padding: 10px 15px; border-radius: 8px; max-width: 80%; align-self: flex-start; }
-        .msg-user { color: #45f3ff; font-weight: bold; font-size: 13px; margin-bottom: 3px; }
-        .msg-text { color: #fff; word-break: break-word; }
-        .sys-msg { align-self: center; color: #888; font-size: 12px; font-style: italic; }
-        .input-area { padding: 15px; background-color: #1f2833; display: flex; gap: 10px; }
-        .input-area input { margin-bottom: 0; flex: 1; }
-        .input-area button { width: 80px; }
+        
+        .messages-area { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+        .msg-box { background-color: #1f2833; padding: 8px 12px; border-radius: 8px; max-width: 85%; align-self: flex-start; border-right: 3px solid #1f2833; }
+        .msg-box.owner-box { border-right-color: #45f3ff; background-color: #24303c; }
+        .msg-box.super-box { border-right-color: #ff4757; background-color: #3a2226; }
+        .msg-user { color: #45f3ff; font-weight: bold; font-size: 12px; margin-bottom: 3px; }
+        .msg-text { color: #fff; word-break: break-word; font-size: 14px; }
+        .sys-msg { align-self: center; color: #888; font-size: 11px; font-style: italic; background: rgba(255,255,255,0.03); padding: 3px 10px; border-radius: 12px; }
+        .input-area { padding: 12px; background-color: #1f2833; display: flex; gap: 8px; align-items: center; }
+        .input-area input { margin-bottom: 0; flex: 1; text-align: right; }
+        .input-area button { width: 70px; margin-bottom: 0; }
+        
+        .side-drawer { position: absolute; top: 0; left: -100%; width: 260px; height: 100%; background-color: #1f2833; box-shadow: 5px 0 15px rgba(0,0,0,0.5); transition: transform 0.3s cubic-bezier(0.1, 0.9, 0.2, 1); display: flex; flex-direction: column; padding: 20px; border-right: 2px solid #45f3ff; z-index: 99; transform: translateX(0); }
+        .side-drawer.open { transform: translateX(100%); }
+        .drawer-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(69,243,255,0.2); padding-bottom: 10px; }
+        .user-list-item { display: flex; align-items: center; justify-content: space-between; padding: 8px; background: #0b0c10; border-radius: 6px; margin-bottom: 6px; font-size: 13px; }
+        
+        .popup-modal { position: absolute; top: 0; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 1000; }
     </style>
 </head>
 <body>
-    <div id="login-screen" class="screen">
+    <div id="rooms-screen" class="screen">
         <div class="card">
             <h1>DARK CHAT</h1>
-            <input type="text" id="username-input" placeholder="Enter Username" maxlength="15">
-            <input type="password" id="password-input" placeholder="Password (Owners Only)">
-            <button id="login-btn">ENTER ROOM</button>
+            <h2>غرف الدردشة الصوتية</h2>
+            <div id="rooms-container" class="rooms-list"></div>
+            <p style="font-size:12px; color:#666;">اضغط على أي غرفة للدخول</p>
         </div>
     </div>
+
+    <div id="room-auth-screen" class="screen hidden">
+        <div class="card">
+            <h2 id="auth-room-title">تسجيل دخول للغرفة</h2>
+            <input type="text" id="username-input" placeholder="أدخل اسمك في الغرفة" maxlength="15">
+            <input type="password" id="password-input" placeholder="كلمة المرور (إذا كنت صاحب الغرفة أو المالك العام)">
+            <button id="login-btn">دخول الغرفة</button>
+            <button id="back-rooms-btn" class="secondary">عودة للقائمة</button>
+        </div>
+    </div>
+
+    <div id="rooms-sidebar" class="rooms-sidebar">
+        <h3 style="margin-bottom:15px; font-size:16px; color:#45f3ff;">🚪 تنقل بين الغرف</h3>
+        <div id="sidebar-rooms-container" class="rooms-list"></div>
+        <button id="logout-rooms-btn" class="secondary" style="margin-bottom:0;">خروج للمنصة</button>
+    </div>
+
     <div id="chat-screen" class="screen hidden">
+        <div id="user-drawer" class="side-drawer">
+            <div class="drawer-header">
+                <h3 style="color:#45f3ff;">👥 المتواجدون</h3>
+                <button id="close-drawer-btn" style="width:auto; padding:5px 10px; margin-bottom:0; background:#ff4757; color:#fff; font-size:12px;">إغلاق</button>
+            </div>
+            <div id="drawer-users-container" style="flex:1; overflow-y:auto;"></div>
+        </div>
+
         <header>
-            <h2>DARK CHAT</h2>
+            <button id="toggle-sidebar-btn" class="btn-mic secondary">🚪 الغرف</button>
+            <h2 id="room-title">اسم الغرفة</h2>
             <div class="mic-panel">
-                <button id="mic-btn" class="btn-mic hidden">START MIC</button>
-                <span id="mic-status" class="status-off">Mic is Off</span>
+                <button id="toggle-users-btn" class="btn-mic secondary">👥 الأعضاء</button>
+                <button id="control-panel-btn" class="btn-mic secondary hidden">⚙️ لوحة التحكم</button>
+                <button id="mic-btn" class="btn-mic hidden">المايك</button>
+                <span id="mic-status" class="status-off">مغلق</span>
             </div>
         </header>
         <div id="chat-messages" class="messages-area"></div>
         <div class="input-area">
-            <input type="text" id="msg-input" placeholder="Type a message..." maxlength="200">
-            <button id="send-btn">SEND</button>
+            <input type="text" id="msg-input" placeholder="اكتب رسالتك هنا..." maxlength="200">
+            <button id="send-btn">إرسال</button>
+        </div>
+    </div>
+
+    <div id="control-modal" class="popup-modal hidden">
+        <div class="card" style="max-width:380px;">
+            <h3>⚙️ إعدادات وصلاحيات الغرفة</h3>
+            <input type="text" id="set-room-name" placeholder="تغيير اسم الغرفة">
+            <input type="password" id="set-room-pass" placeholder="تغيير كلمة مرور الغرفة">
+            <select id="set-room-bg">
+                <option value="#0b0c10">خلفية سوداء كلاسيك</option>
+                <option value="#1a1a2e">خلفية زرقاء داكنة</option>
+                <option value="#2b1a2e">خلفية بنفسجية ليلية</option>
+                <option value="#1a2e1a">خلفية خضراء زيتونية</option>
+            </select>
+            <button id="save-settings-btn">حفظ الإعدادات</button>
+            <button id="clear-chat-btn" class="danger">🗑️ مسح محادثات الشات</button>
+            <button id="close-modal-btn" class="secondary" style="margin-bottom:0;">إغلاق اللوحة</button>
         </div>
     </div>
     <script>
         const socket = io();
         let audioContext = null;
         let myRole = "USER";
-        const loginScreen = document.getElementById('login-screen');
+        let selectedRoomId = null;
+
+        const roomsScreen = document.getElementById('rooms-screen');
+        const roomAuthScreen = document.getElementById('room-auth-screen');
         const chatScreen = document.getElementById('chat-screen');
+        const roomsSidebar = document.getElementById('rooms-sidebar');
+        const controlModal = document.getElementById('control-modal');
+        
+        const roomsContainer = document.getElementById('rooms-container');
+        const sidebarRoomsContainer = document.getElementById('sidebar-rooms-container');
+        const authRoomTitle = document.getElementById('auth-room-title');
         const usernameInput = document.getElementById('username-input');
         const passwordInput = document.getElementById('password-input');
         const loginBtn = document.getElementById('login-btn');
+        const roomTitle = document.getElementById('room-title');
         const messagesArea = document.getElementById('chat-messages');
         const msgInput = document.getElementById('msg-input');
         const sendBtn = document.getElementById('send-btn');
         const micBtn = document.getElementById('mic-btn');
         const micStatus = document.getElementById('mic-status');
+        
+        const controlPanelBtn = document.getElementById('control-panel-btn');
+        const toggleUsersBtn = document.getElementById('toggle-users-btn');
+        const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
+        const closeDrawerBtn = document.getElementById('close-drawer-btn');
+        const userDrawer = document.getElementById('user-drawer');
+        const drawerUsersContainer = document.getElementById('drawer-users-container');
+        
+        const setRoomName = document.getElementById('set-room-name');
+        const setRoomPass = document.getElementById('set-room-pass');
+        const setRoomBg = document.getElementById('set-room-bg');
+        const saveSettingsBtn = document.getElementById('save-settings-btn');
+        const clearChatBtn = document.getElementById('clear-chat-btn');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const backRoomsBtn = document.getElementById('back-rooms-btn');
+        const logoutRoomsBtn = document.getElementById('logout-rooms-btn');
+
         let isBroadcasting = false;
 
+        socket.on('init-rooms', (rooms) => { renderRoomsList(rooms); });
+        socket.on('update-rooms', (rooms) => { renderRoomsList(rooms); });
+
+        function renderRoomsList(rooms) {
+            roomsContainer.innerHTML = "";
+            sidebarRoomsContainer.innerHTML = "";
+            rooms.forEach(room => {
+                const div = document.createElement('div');
+                div.className = 'room-item';
+                div.innerHTML = `<span class="room-name">🚪 ${room.name}</span><span class="room-counter">${room.activeUsers} متصل</span>`;
+                div.onclick = () => openAuthScreen(room.id, room.name);
+                roomsContainer.appendChild(div);
+
+                const sDiv = div.cloneNode(true);
+                sDiv.onclick = () => { socket.emit('stop-mic'); location.reload(); };
+                sidebarRoomsContainer.appendChild(sDiv);
+            });
+        }
+
+        function openAuthScreen(roomId, roomName) {
+            selectedRoomId = roomId;
+            authRoomTitle.innerText = `الدخول إلى: ${roomName}`;
+            roomsScreen.classList.add('hidden');
+            roomAuthScreen.classList.remove('hidden');
+        }
+
+        backRoomsBtn.addEventListener('click', () => {
+            roomAuthScreen.classList.add('hidden');
+            roomsScreen.classList.remove('hidden');
+        });
+
         loginBtn.addEventListener('click', () => {
-            const username = usernameInput.value.trim();
-            const password = passwordInput.value.trim();
-            if (username) {
-                socket.emit('join-chat', { username, password });
-                loginScreen.classList.add('hidden');
+            const user = usernameInput.value.trim();
+            const pass = passwordInput.value.trim();
+            if (user) {
+                socket.emit('join-chat', { username: user, password: pass, roomId: selectedRoomId });
+                roomAuthScreen.classList.add('hidden');
                 chatScreen.classList.remove('hidden');
             }
         });
+
+        toggleSidebarBtn.addEventListener('click', () => { roomsSidebar.classList.toggle('open'); });
+        toggleUsersBtn.addEventListener('click', () => { userDrawer.classList.toggle('open'); });
+        closeDrawerBtn.addEventListener('click', () => { userDrawer.classList.remove('open'); });
+        controlPanelBtn.addEventListener('click', () => { controlModal.classList.remove('hidden'); });
+        closeModalBtn.addEventListener('click', () => { controlModal.classList.add('hidden'); });
+        logoutRoomsBtn.addEventListener('click', () => { location.reload(); });
+
+        let startX = 0;
+        document.addEventListener('touchstart', (e) => { startX = e.touches.clientX; }, {passive: true});
+        document.addEventListener('touchend', (e) => {
+            let diffX = startX - e.changedTouches.clientX;
+            if (chatScreen.classList.contains('hidden')) return;
+            if (diffX > 60 && startX > window.innerWidth - 50) roomsSidebar.classList.add('open');
+            if (diffX < -60 && startX < 100) roomsSidebar.classList.remove('open');
+        }, {passive: true});
 
         sendBtn.addEventListener('click', sendMsg);
         msgInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMsg(); });
 
         function sendMsg() {
             const text = msgInput.value.trim();
-            if (text) {
-                socket.emit('send-msg', { text });
-                msgInput.value = '';
-            }
+            if (text) { socket.emit('send-msg', { text }); msgInput.value = ''; }
         }
 
         socket.on('role-assigned', (data) => {
             myRole = data.role;
-            if (myRole === "OWNER") { micBtn.classList.remove('hidden'); }
+            roomTitle.innerText = data.roomName;
+            document.body.style.backgroundColor = data.bg;
+            messagesArea.style.backgroundColor = data.bg;
+            if (myRole === "SUPER_ADMIN" || myRole === "ROOM_OWNER") {
+                micBtn.classList.remove('hidden');
+                controlPanelBtn.classList.remove('hidden');
+            } else {
+                micBtn.classList.add('hidden');
+                controlPanelBtn.classList.add('hidden');
+            }
         });
 
+        socket.on('room-users-list', (users) => {
+            drawerUsersContainer.innerHTML = "";
+            users.forEach(u => {
+                const div = document.createElement('div');
+                let tag = "👤";
+                if(u.role === "SUPER_ADMIN") tag = "👑";
+                if(u.role === "ROOM_OWNER") tag = "⭐";
+                
+                let actionBtn = "";
+                if((myRole === "SUPER_ADMIN" || myRole === "ROOM_OWNER") && u.role === "USER") {
+                    actionBtn = `<button style="width:auto; padding:2px 6px; font-size:10px; margin-bottom:0;" onclick="promoteUser('${u.username}')">منح رتبة</button>`;
+                }
+                
+                div.className = 'user-list-item';
+                div.innerHTML = `<div>${tag} <span style="color:#fff;">${u.username}</span></div> ${actionBtn}`;
+                drawerUsersContainer.appendChild(div);
+            });
+        });
+
+        window.promoteUser = function(name) {
+            socket.emit('give-role', { targetUser: name, newRole: "ROOM_OWNER" });
+        };
+
+        saveSettingsBtn.addEventListener('click', () => {
+            socket.emit('update-room-settings', { name: setRoomName.value.trim(), password: setRoomPass.value.trim(), bg: setRoomBg.value });
+            controlModal.classList.add('hidden');
+        });
+
+        clearChatBtn.addEventListener('click', () => { socket.emit('clear-chat'); controlModal.classList.add('hidden'); });
+        socket.on('chat-cleared', () => { messagesArea.innerHTML = "<div class='sys-msg'>🧹 تم مسح سجل الدردشة بواسطة الإدارة</div>"; });
+        socket.on('room-settings-changed', (data) => { roomTitle.innerText = data.name; document.body.style.backgroundColor = data.bg; messagesArea.style.backgroundColor = data.bg; });
+
         socket.on('sys-message', (text) => {
-            const div = document.createElement('div');
-            div.className = 'sys-msg';
-            div.innerText = text;
-            messagesArea.appendChild(div);
-            messagesArea.scrollTop = messagesArea.scrollHeight;
+            const div = document.createElement('div'); div.className = 'sys-msg'; div.innerText = text;
+            messagesArea.appendChild(div); messagesArea.scrollTop = messagesArea.scrollHeight;
         });
 
         socket.on('new-msg', (data) => {
             const div = document.createElement('div');
-            div.className = 'msg-box';
-            const prefix = data.role === "OWNER" ? "👑 " : "";
+            let rClass = ""; let prefix = "👤 ";
+            if(data.role === "SUPER_ADMIN") { rClass = "super-box"; prefix = "👑 المالك العام "; }
+            if(data.role === "ROOM_OWNER") { rClass = "owner-box"; prefix = "⭐ صاحب الغرفة "; }
+            div.className = `msg-box ${rClass}`;
             div.innerHTML = `<div class="msg-user">${prefix}${data.user}</div><div class="msg-text">${data.text}</div>`;
-            messagesArea.appendChild(div);
-            messagesArea.scrollTop = messagesArea.scrollHeight;
+            messagesArea.appendChild(div); messagesArea.scrollTop = messagesArea.scrollHeight;
         });
 
         micBtn.addEventListener('click', async () => {
-            if (myRole !== "OWNER") return;
             if (!isBroadcasting) {
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    socket.emit('start-mic');
-                    isBroadcasting = true;
-                    micBtn.innerText = 'STOP MIC';
-                    micBtn.classList.add('active');
-                    micStatus.innerText = 'You are Live';
-                    micStatus.className = 'status-live';
+                    socket.emit('start-mic'); isBroadcasting = true;
+                    micBtn.innerText = 'إيقاف المايك'; micBtn.classList.add('active');
+                    micStatus.innerText = 'بث مباشر حي'; micStatus.className = 'status-live';
                     audioContext = new (window.AudioContext || window.webkitAudioContext)();
                     const source = audioContext.createMediaStreamSource(stream);
                     const processor = audioContext.createScriptProcessor(4096, 1, 1);
-                    source.connect(processor);
-                    processor.connect(audioContext.destination);
+                    source.connect(processor); processor.connect(audioContext.destination);
                     processor.onaudioprocess = (e) => {
                         if (!isBroadcasting) return;
-                        const inputData = e.inputBuffer.getChannelData(0);
-                        socket.emit('audio-data', inputData);
+                        socket.emit('audio-data', e.inputBuffer.getChannelData(0));
                     };
                     window.localStream = stream;
                     window.processor = processor;
-                } catch (err) {}
+                } catch (err) { alert("فشل الوصول للميكروفون"); }
             } else {
                 stopLocalMic();
                 socket.emit('stop-mic');
@@ -149,18 +321,18 @@
 
         function stopLocalMic() {
             isBroadcasting = false;
-            micBtn.innerText = 'START MIC';
+            micBtn.innerText = 'تشغيل المايك';
             micBtn.classList.remove('active');
-            micStatus.innerText = 'Mic is Off';
+            micStatus.innerText = 'المايك مغلق';
             micStatus.className = 'status-off';
             if (window.localStream) { window.localStream.getTracks().forEach(track => track.stop()); }
             if (window.processor) window.processor.disconnect();
             if (audioContext) audioContext.close();
         }
 
-        socket.on('mic-started', () => {
+        socket.on('mic-started', (data) => {
             if (!isBroadcasting) {
-                micStatus.innerText = '👑 Owner is Speaking...';
+                micStatus.innerText = `👑 ${data.name} يتحدث الآن...`;
                 micStatus.className = 'status-on';
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
             }
@@ -168,12 +340,11 @@
 
         socket.on('mic-stopped', () => {
             if (!isBroadcasting) {
-                micStatus.innerText = 'Mic is Off';
+                micStatus.innerText = 'المايك مغلق';
                 micStatus.className = 'status-off';
                 if (audioContext) audioContext.close();
             }
         });
-
         socket.on('audio-stream', (data) => {
             if (isBroadcasting || !audioContext) return;
             const buffer = audioContext.createBuffer(1, data.length, audioContext.sampleRate);
@@ -184,13 +355,54 @@
             source.start();
         });
 
-        socket.on('init-state', (state) => {
-            if (state.hasBroadcaster && !isBroadcasting) {
-                micStatus.innerText = '👑 Owner is Speaking...';
-                micStatus.className = 'status-on';
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        adminBtn.addEventListener('click', () => { adminModal.classList.remove('hidden'); });
+        closeAdminBtn.addEventListener('click', () => { adminModal.classList.add('hidden'); });
+
+        saveAdminBtn.addEventListener('click', () => {
+            const newName = changeRoomNameInput.value.trim();
+            const newBg = changeRoomBgInput.value.trim();
+            if (newName || newBg) {
+                socket.emit('update-room-settings', { roomName: newName, roomBg: newBg });
+                adminModal.classList.add('hidden');
             }
         });
+
+        clearChatBtn.addEventListener('click', () => {
+            if (confirm("هل أنت متأكد من مسح جميع رسائل الدردشة الحالية؟")) {
+                socket.emit('clear-room-chat');
+                adminModal.classList.add('hidden');
+            }
+        });
+
+        socket.on('room-settings-updated', (data) => {
+            if (data.name) { roomTitle.innerText = data.name; }
+            if (data.bg) { messagesArea.style.backgroundImage = `url('${data.bg}')`; messagesArea.style.backgroundSize = 'cover'; messagesArea.style.backgroundPosition = 'center'; }
+        });
+
+        socket.on('room-chat-cleared', () => { messagesArea.innerHTML = ""; });
+        giveRoleBtn.addEventListener('click', () => {
+            const targetUser = targetUserRoleInput.value.trim();
+            const targetPass = targetPassRoleInput.value.trim();
+            if (targetUser && targetPass) {
+                socket.emit('assign-room-owner', { targetUser, targetPass });
+                alert(`تم تعيين ${targetUser} كمالك فرعي للغرفة بكلمة المرور المحددة`);
+                targetUserRoleInput.value = "";
+                targetPassRoleInput.value = "";
+                adminModal.classList.add('hidden');
+            } else {
+                alert("يرجى ملء اسم المستخدم وكلمة المرور الخاصة بالرتبة");
+            }
+        });
+
+        let startX = 0;
+        document.addEventListener('touchstart', (e) => { startX = e.touches.clientX; }, {passive: true});
+        document.addEventListener('touchend', (e) => {
+            let endX = e.changedTouches.clientX;
+            let diffX = startX - endX;
+            if (chatScreen.classList.contains('hidden')) return;
+            if (diffX > 60 && startX > window.innerWidth - 50) { openSidebar(); }
+            if (diffX < -60 && startX < 100) { closeSidebar(); }
+        }, {passive: true});
     </script>
 </body>
 </html>
