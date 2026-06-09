@@ -1,14 +1,8 @@
 {
-  "name": "dark-chat-root",
+  "name": "dark-chat",
   "version": "1.0.0",
-  "description": "تطبيق شات صوتي وكتابي متكامل - نظام الإدارة العليا ROOT",
-  "license": "MIT",
+  "description": "Dark Chat Room Application",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
-  "dependencies": {
-    "express": "^4.19.2",
-    "socket.io": "^4.7.5"
-  }
-}
