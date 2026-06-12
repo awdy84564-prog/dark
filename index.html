@@ -1,1 +1,416 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>حرب ملوك قلعة حلب</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            color: white;
+            overflow: hidden;
+            user-select: none;
+        }
 
+        h1 {
+            margin-bottom: 5px;
+            color: #f1c40f;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+
+        #gameCanvas {
+            background: linear-gradient(to bottom, #2c3e50, #bdc3c7);
+            border: 4px solid #d35400;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+            cursor: crosshair;
+        }
+
+        .ui-container {
+            width: 800px;
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            background: #2c3e50;
+            padding: 10px;
+            border-radius: 5px;
+            border: 2px solid #34495e;
+        }
+
+        .hint {
+            margin-top: 10px;
+            color: #aaa;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>⚔️ حرب الملوك: معركة عرش قلعة حلب ⚔️</h1>
+    
+    <!-- لوحة الرسم الخاصة باللعبة -->
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+
+    <div class="ui-container">
+        <div>🏰 صحة أسوار القلعة: <b id="healthText" style="color: #e74c3c;">100%</b></div>
+        <div>👑 الملوك المهزومين: <b id="scoreText" style="color: #f1c40f;">0 / 20</b></div>
+    </div>
+
+    <div class="hint">
+        🏹 **طريقة اللعب:** حرك الفأرة للتصويب، واضغط **بزر الفأرة الأيسر** لإطلاق قذائف الدفاع من البرج لمنع الملوك من احتلال القلعة!
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const healthText = document.getElementById('healthText');
+        const scoreText = document.getElementById('scoreText');
+
+        // حالة اللعبة
+        let castleHealth = 100;
+        let score = 0;
+        let gameOver = false;
+        let gameWon = false;
+
+        // إحداثيات برج الملك المدافع (أعلى اليسار فوق السور)
+        const kingTower = { x: 100, y: 180, width: 80, height: 120 };
+
+        // مصفوفات العناصر الديناميكية
+        const Projectiles = [];
+        const Enemies = [];
+
+        // مؤقت لظهور الأعداء الجدد
+        let spawnTimer = 0;
+        let spawnInterval = 90; // يظهر ملك غازي كل 1.5 ثانية تقريباً
+
+        // الاستماع لضغط الفأرة لإطلاق القذائف
+        canvas.addEventListener('mousedown', (e) => {
+            if (gameOver || gameWon) return;
+
+            // حساب موقع الضغطة بالنسبة للكانفاس
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            // نقطة الانطلاق من البرج
+            const startX = kingTower.x + kingTower.width / 2;
+            const startY = kingTower.y;
+
+            // حساب زاوية وسرعة المقذوف باتجاه الفأرة
+            const angle = Math.atan2(mouseY - startY, mouseX - startX);
+            const speed = 8;
+
+            Projectiles.push({
+                x: startX,
+                y: startY,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                radius: 6
+            });
+        });
+
+        // دالة إنشاء الأعداء (الملوك الغزاة)
+        function spawnEnemy() {
+            // الملوك يبدأون الهجوم من أسفل يمين الشاشة (صعوداً نحو التل والقلعة)
+            Enemies.push({
+                x: 820,
+                y: canvas.height - 50 - Math.random() * 20,
+                speed: 1.5 + Math.random() * 1.5,
+                radius: 15,
+                hp: 2
+            });
+        }
+
+        // البيئة الرسومية الثابتة (تلة القلعة والأسوار)
+        function drawEnvironment() {
+            // 1. رسم تلة القلعة الشهيرة
+            ctx.beginPath();
+            ctx.moveTo(0, 300);
+            ctx.lineTo(300, 300);
+            ctx.lineTo(800, 450);
+            ctx.lineTo(800, 500);
+            ctx.lineTo(0, 500);
+            ctx.closePath();
+            ctx.fillStyle = '#b38f4d'; // لون ترابي يمثل التلة
+            ctx.fill();
+
+            // 2. رسم أسوار القلعة الجانبية
+            ctx.fillStyle = '#7f8c8d';
+            ctx.fillRect(0, 250, 150, 60);
+
+            // 3. رسم برج الملك الرئيسي
+            ctx.fillStyle = '#95a5a6';
+            ctx.fillRect(kingTower.x, kingTower.y, kingTower.width, kingTower.height);
+            
+            // شرفات البرج
+            ctx.fillStyle = '#7f8c8d';
+            for(let i = 0; i < 4; i++) {
+                ctx.fillRect(kingTower.x + (i * 22), kingTower.y - 10, 14, 10);
+            }
+
+            // 4. رسم الملك المدافع (أنت) فوق البرج
+            ctx.beginPath();
+            ctx.arc(kingTower.x + kingTower.width/2, kingTower.y - 20, 12, 0, Math.PI * 2);
+            ctx.fillStyle = '#3498db'; // رداء الملك الأزرق
+            ctx.fill();
+            // التاج الذهبي
+            ctx.fillStyle = '#f1c40f';
+            ctx.fillRect(kingTower.x + kingTower.width/2 - 8, kingTower.y - 38, 16, 8);
+        }
+
+        // تحديث حركة وحالة العناصر
+        function update() {
+            if (gameOver || gameWon) return;
+
+            // 1. إدارة ظهور الأعداء
+            spawnTimer++;
+            if (spawnTimer >= spawnInterval) {
+                spawnEnemy();
+                spawnTimer = 0;
+            }
+
+            // 2. تحديث وحركة القذائف المداهنة
+            for (let i = Projectiles.length - 1; i >= 0; i--) {
+                const p = Projectiles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+
+                // حذف القذيفة إذا خرجت عن الشاشة
+                if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) {
+                    Projectiles.splice(i, 1);
+                }
+            }
+
+            // 3. تحديث حركة الأعداء والاصطدامات
+            for (let i = Enemies.length - 1; i >= 0; i--) {
+                const e = Enemies[i];
+                
+                // الأعداء يتحركون يساراً وصعوداً باتجاه السور
+                e.x -= e.speed;
+                if(e.x > 300) {
+                    e.y -= (e.speed * 0.3); // صعود تدريجي مع تضاريس التل
+                }
+
+                // التحقق من وصول العدو للسور واحتلال القلعة
+                if (e.x <= 150) {
+                    castleHealth -= 10;
+                    if (castleHealth < 0) castleHealth = 0;
+                    healthText.innerText = castleHealth + "%";
+                    Enemies.splice(i, 1);
+
+                    if (castleHealth <= 0) {
+                        gameOver = true;
+                    }
+                    continue;
+                }
+
+                // التحقق من إصابة القذائف للأعداء
+                for (let j = Projectiles.length - 1; j >= 0; j--) {
+                    const p = Projectiles[j];
+                    const dist = Math.hypot(p.x - e.x, p.y - e.y);
+
+                    // حدوث تصادم
+                    if (dist < p.radius + e.radius) {
+                        e.hp--;
+                        Projectiles.splice(j, 1); // حذف القذيفة
+
+                        if (e.hp <= 0) {
+                            Enemies.splice(i, 1); // حذف الملك الغازي
+                            score++;
+                            scoreText.innerText = score + " / 20";
+                            
+                            if (score >= 20) {
+                                gameWon = true;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        // رسم كل المكونات على الشاشة
+        function draw() {
+            // تنظيف الشاشة ورسم الخلفية
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // رسم التضاريس والقلعة
+            drawEnvironment();
+
+            // رسم القذائف (كرات نارية دفاعية)
+            Projectiles.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#e67e22';
+                ctx.fill();
+            });
+
+            // رسم الملوك الغزاة
+            Enemies.forEach(e => {
+                ctx.beginPath();
+                ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#e74c3c'; // الملوك الأعداء باللون الأحمر
+                ctx.fill();
+                
+                // رسم تاج صغير لكل ملك غازي لتمييزهم
+                ctx.fillStyle = '#f1c40f';
+                ctx.fillRect(e.x - 6, e.y - 22, 12, 6);
+            });
+
+            // شاشات النهاية (الفوز أو الخسارة)
+            ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+            ctx.font = "bold 24px 'Segoe UI'";
+            ctx.textAlign = "center";
+
+            if (gameOver) {
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = "#e74c3c";
+                ctx.fillText("❌ سقطت القلعة! احتلت الجيوش أسوار حلب العظيمة.", canvas.width / 2, canvas.height / 2);
+                ctx.fillStyle = "#fff";
+                ctx.font = "18px 'Segoe UI'";
+                ctx.fillText("قم بتحديث الصفحة (F5) لإعادة المحاولة وصد الغزو.", canvas.width / 2, canvas.height / 2 + 40);
+            }
+
+            if (gameWon) {
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = "#2ecc71";
+                ctx.fillText("👑 نصر مجيد! أنت ملك القلعة الحقيقي وحامي ديار حلب العظيمة!", canvas.width / 2, canvas.height / 2);
+            }
+        }
+
+        // حلقة اللعبة المستمرة (Game Loop)
+        function gameLoop() {
+            update();
+          draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // تحديث منطق اللعبة وحركتها
+        function update() {
+            if (gameState !== 'playing') return;
+
+            // حرك قذائف المدافع
+            bullets.forEach((bullet, index) => {
+                bullet.x += bullet.dx;
+                bullet.y += bullet.dy;
+
+                // التحقق من اصطدام القذيفة بالأبراج الأخرى
+                towers.forEach(tower => {
+                    if (tower.id !== bullet.ownerId && tower.health > 0) {
+                        let dist = Math.hypot(bullet.x - tower.x, bullet.y - tower.y);
+                        if (dist < tower.radius) {
+                            tower.health -= 15; // مقدار الضرر
+                            bullets.splice(index, 1); // حذف القذيفة
+
+                            // إذا تدمر البرج، يحتله الملك صاحب القذيفة
+                            if (tower.health <= 0) {
+                                tower.health = 0;
+                                tower.owner = bullet.ownerName;
+                                tower.color = towers.find(t => t.id === bullet.ownerId).color;
+                                checkWinCondition();
+                            }
+                        }
+                    }
+                });
+
+                // حذف القذائف الخارجة عن الشاشة
+                if (bullet.x < 0 || bullet.x > canvas.width || bullet.y < 0 || bullet.y > canvas.height) {
+                    bullets.splice(index, 0); 
+                }
+            });
+
+            // حركة الذكاء الاصطناعي للملوك المنافسين (إطلاق تلقائي)
+            towers.forEach(tower => {
+                if (tower.id !== 1 && tower.health > 0) { // الأبراج المنافسة فقط
+                    tower.cooldown--;
+                    if (tower.cooldown <= 0) {
+                        // استهداف برج اللاعب أو برج آخر عشوائي
+                        let target = towers.find(t => t.id !== tower.id && t.health > 0);
+                        if (target) {
+                            let angle = Math.atan2(target.y - tower.y, target.x - tower.x);
+                            bullets.push({
+                                x: tower.x,
+                                y: tower.y - 20,
+                                dx: Math.cos(angle) * 5,
+                                dy: Math.sin(angle) * 5,
+                                ownerId: tower.id,
+                                ownerName: tower.owner
+                            });
+                        }
+                        tower.cooldown = Math.floor(Math.random() * 100) + 100; // إعادة وقت الانتظار
+                    }
+                }
+            });
+        }
+
+        // رسم جميع عناصر اللعبة على الشاشة
+        function draw() {
+            // مسح الشاشة ورسم الخلفية والأرضية
+            ctx.fillStyle = "#eccc68"; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#7f8c8d";
+            ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+
+            // رسم الأبراج والملوك
+            towers.forEach(tower => {
+                ctx.save();
+                // رسم جسم البرج
+                ctx.fillStyle = tower.health > 0 ? tower.color : "#7f8c8d";
+                ctx.fillRect(tower.x - 30, tower.y - 50, 60, 50);
+                
+                // رسم شرفة البرج (شكل القلعة)
+                ctx.fillRect(tower.x - 35, tower.y - 65, 70, 15);
+                
+                // رسم شريط الصحة فوق البرج
+                ctx.fillStyle = "red";
+                ctx.fillRect(tower.x - 30, tower.y - 80, 60, 6);
+                ctx.fillStyle = "green";
+                ctx.fillRect(tower.x - 30, tower.y - 80, (tower.health / 100) * 60, 6);
+
+                // كتابة اسم الملك المحتل للبرج
+                ctx.fillStyle = "#2c3e50";
+                ctx.font = "bold 14px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText(tower.owner, tower.x, tower.y - 90);
+                ctx.restore();
+            });
+
+            // رسم قذائف المدافع
+            bullets.forEach(bullet => {
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, 6, 0, Math.PI * 2);
+                ctx.fillStyle = "#2c3e50";
+                ctx.fill();
+                ctx.closePath();
+            });
+        }
+
+        // التحقق من شروط الفوز والسيطرة الكاملة
+        function checkWinCondition() {
+            let activeOwners = [...new Set(towers.filter(t => t.health > 0).map(t => t.owner))];
+            
+            // إذا بقي مالك واحد فقط لجميع الأبراج الحية
+            if (activeOwners.length === 1) {
+                gameState = 'over';
+                document.getElementById('message').style.display = 'block';
+                if (activeOwners[0] === "أنت (ملك حلب)") {
+                    document.getElementById('message').innerHTML = "👑 نصر ساحق! لقد أصبحت ملك قلعة حلب العظيم وطردت الغزاة! 👑";
+                } else {
+                    document.getElementById('message').innerHTML = `💀 خسارة! لقد احتل ${activeOwners[0]} القلعة بالكامل. حاول مجدداً! 💀`;
+                }
+            }
+        }
+
+        // تشغيل اللعبة تلقائياً عند تحميل الصفحة
+        gameLoop();
+    </script>
+</body>
+</html>
