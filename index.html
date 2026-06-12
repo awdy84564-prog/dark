@@ -1,1 +1,268 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WEVO 2021 - DARK</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Tahoma}
+body{background:#1a1a1a;color:#fff;height:100vh;overflow:hidden}
+.login{position:fixed;inset:0;background:linear-gradient(135deg,#1a1a1a,#2d2d2d);display:flex;align-items:center;justify-content:center;z-index:100}
+.login-box{background:#252525;padding:30px;border-radius:15px;width:90%;max-width:400px;border:2px solid #FFD700;box-shadow:0 0 30px rgba(255,215,0,0.3)}
+.login-box h1{text-align:center;color:#FFD700;margin-bottom:20px;font-size:28px}
+.login-box input{width:100%;padding:12px;margin:10px 0;background:#1a1a1a;border:1px solid #444;color:#fff;border-radius:8px}
+.login-box button{width:100%;padding:12px;background:linear-gradient(135deg,#FFD700,#FFA500);border:none;border-radius:8px;color:#000;font-weight:bold;cursor:pointer;font-size:16px}
+.container{display:none;height:100vh;grid-template-columns:250px 1fr 200px;gap:1px;background:#000}
+.sidebar{background:#252525;padding:15px;overflow-y:auto}
+.header{background:linear-gradient(90deg,#2d2d2d,#1a1a1a);padding:15px;text-align:center;border-bottom:2px solid #FFD700}
+.header h2{color:#FFD700}
+.mics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:15px 0}
+.mic{background:#1a1a1a;border:2px solid #444;border-radius:10px;padding:10px;text-align:center;cursor:pointer;transition:0.3s}
+.mic:hover{border-color:#FFD700}
+.mic.active{border-color:#4caf50;background:#1b5e20}
+.mic-name{font-size:11px;margin-top:5px}
+.chat-area{display:flex;flex-direction:column;background:#1e1e1e}
+.messages{flex:1;padding:15px;overflow-y:auto}
+.msg{margin:8px 0;padding:10px;background:#252525;border-radius:8px;border-right:3px solid #444}
+.msg-header{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.rank-icon{font-size:16px}
+.username{font-weight:bold}
+.time{font-size:11px;color:#888;margin-right:auto}
+.msg img{max-width:250px;border-radius:8px;margin-top:5px}
+.system{text-align:center;color:#FFD700;font-size:12px;margin:5px 0}
+.input-area{display:flex;padding:10px;background:#252525;gap:10px;border-top:1px solid #444}
+.input-area input{flex:1;padding:12px;background:#1a1a1a;border:1px solid #444;color:#fff;border-radius:8px}
+.input-area button{padding:12px 20px;background:#FFD700;border:none;border-radius:8px;color:#000;cursor:pointer;font-weight:bold}
+.users-list{background:#252525;padding:15px;overflow-y:auto}
+.user-item{display:flex;align-items:center;gap:8px;padding:8px;margin:5px 0;background:#1a1a1a;border-radius:8px;cursor:pointer}
+.user-item:hover{background:#333}
+.muted{opacity:0.5}
+.glow{animation:glow 2s infinite}
+@keyframes glow{0%,100%{text-shadow:0 0 10px #FFD700}50%{text-shadow:0 0 20px #FFD700,0 0 30px #FFA500}}
+.admin-menu{position:absolute;background:#333;border:1px solid #FFD700;border-radius:8px;padding:5px;display:none;z-index:50}
+.admin-menu button{display:block;width:100%;padding:8px;background:none;border:none;color:#fff;text-align:right;cursor:pointer}
+.admin-menu button:hover{background:#444}
+#imageInput{display:none}
+</style>
+</head>
+<body>
 
+<div class="login" id="login">
+  <div class="login-box">
+    <h1>👑 WEVO 2021</h1>
+    <input id="username" placeholder="اسمك" maxlength="20">
+    <input id="password" type="password" placeholder="كلمة سر الرتبة - اختياري">
+    <button onclick="join()">دخول الشات</button>
+  </div>
+</div>
+
+<div class="container" id="app">
+  <div class="sidebar">
+    <div class="header"><h2>🎤 المايكات</h2></div>
+    <div class="mics" id="mics"></div>
+    <button id="leaveMicBtn" onclick="leaveMic()" style="display:none;width:100%;margin-top:10px">انزل من المايك</button>
+  </div>
+
+  <div class="chat-area">
+    <div class="header"><h2>💬 الدردشة العامة</h2></div>
+    <div class="messages" id="messages"></div>
+    <div class="input-area">
+      <input id="msgInput" placeholder="اكتب رسالتك..." maxlength="300">
+      <input type="file" id="imageInput" accept="image/*">
+      <button onclick="document.getElementById('imageInput').click()">📷</button>
+      <button onclick="sendMsg()">ارسال</button>
+    </div>
+  </div>
+
+  <div class="users-list">
+    <div class="header"><h2>👥 المتواجدين</h2></div>
+    <div id="usersList"></div>
+  </div>
+</div>
+
+<div class="admin-menu" id="adminMenu"></div>
+
+<script>
+const socket = io();
+let myUser = null;
+let myMic = null;
+const mics = [1,2,3,4,5,6];
+let micUsers = {};
+
+const RANKS = {
+  0: { name: 'زائر', color: '#9e9e9e', icon: '👤' },
+  1: { name: 'عضو', color: '#4caf50', icon: '⭐' },
+  2: { name: 'عضو مميز', color: '#2196f3', icon: '💎' },
+  3: { name: 'مشرف', color: '#ff9800', icon: '🛡️' },
+  4: { name: 'ادمن', color: '#f44336', icon: '⚡' },
+  5: { name: 'المالك', color: '#FFD700', icon: '👑', glow: true }
+};
+
+function join() {
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  if(!username) return alert('اكتب اسمك');
+  socket.emit('join', {username, password});
+}
+
+socket.on('init', (data) => {
+  myUser = data.user;
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('app').style.display = 'grid';
+  renderMics();
+  data.messages.forEach(addMsg);
+  updateUsers(data.users);
+});
+
+socket.on('banned', () => {
+  alert('تم حظرك من الشات');
+  location.reload();
+});
+
+socket.on('kicked', () => {
+  alert('تم طردك من الشات');
+  location.reload();
+});
+
+function renderMics() {
+  const micsDiv = document.getElementById('mics');
+  micsDiv.innerHTML = '';
+  mics.forEach(num => {
+    const div = document.createElement('div');
+    div.className = 'mic';
+    div.id = `mic-${num}`;
+    div.innerHTML = `<div>🎤 ${num}</div><div class="mic-name">فارغ</div>`;
+    div.onclick = () => requestMic(num);
+    micsDiv.appendChild(div);
+  });
+}
+
+function requestMic(num) {
+  if(myMic) return alert('انت على مايك اصلاً');
+  socket.emit('micRequest', num);
+}
+
+function leaveMic() {
+  socket.emit('leaveMic');
+  myMic = null;
+  document.getElementById('leaveMicBtn').style.display = 'none';
+}
+
+socket.on('micUpdate', ({userId, username, mic, rank}) => {
+  const micDiv = document.getElementById(`mic-${mic}`);
+  micUsers[mic] = userId;
+  micDiv.classList.add('active');
+  micDiv.querySelector('.mic-name').innerHTML = `${RANKS[rank].icon} ${username}`;
+  if(userId === myUser.id) {
+    myMic = mic;
+    document.getElementById('leaveMicBtn').style.display = 'block';
+  }
+});
+
+socket.on('micLeave', (userId) => {
+  for(let mic in micUsers) {
+    if(micUsers[mic] === userId) {
+      const micDiv = document.getElementById(`mic-${mic}`);
+      micDiv.classList.remove('active');
+      micDiv.querySelector('.mic-name').textContent = 'فارغ';
+      delete micUsers[mic];
+    }
+  }
+});
+
+function sendMsg() {
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  if(!text) return;
+  socket.emit('message', text);
+  input.value = '';
+}
+
+document.getElementById('msgInput').addEventListener('keypress', e => {
+  if(e.key === 'Enter') sendMsg();
+});
+
+document.getElementById('imageInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if(!file) return;
+  if(file.size > 2 * 1024 * 1024) return alert('الصورة اكبر من 2MB');
+  const reader = new FileReader();
+  reader.onload = () => socket.emit('sendImage', reader.result);
+  reader.readAsDataURL(file);
+  e.target.value = '';
+});
+
+socket.on('message', addMsg);
+socket.on('system', (text) => {
+  const div = document.createElement('div');
+  div.className = 'system';
+  div.textContent = `⚡ ${text}`;
+  document.getElementById('messages').appendChild(div);
+  scrollDown();
+});
+
+function addMsg(msg) {
+  const div = document.createElement('div');
+  div.className = 'msg';
+  const rank = RANKS[msg.user.rank];
+  const glowClass = rank.glow? 'glow' : '';
+  div.innerHTML = `
+    <div class="msg-header">
+      <span class="rank-icon">${rank.icon}</span>
+      <span class="username ${glowClass}" style="color:${rank.color}">${msg.user.username}</span>
+      <span class="time">${msg.time}</span>
+    </div>
+    ${msg.text? `<div>${msg.text}</div>` : ''}
+    ${msg.image? `<img src="${msg.image}">` : ''}
+  `;
+  document.getElementById('messages').appendChild(div);
+  scrollDown();
+}
+
+function scrollDown() {
+  const m = document.getElementById('messages');
+  m.scrollTop = m.scrollHeight;
+}
+
+socket.on('updateUsers', updateUsers);
+function updateUsers(users) {
+  const list = document.getElementById('usersList');
+  list.innerHTML = '';
+  users.sort((a,b) => b.rank - a.rank).forEach(u => {
+    const rank = RANKS[u.rank];
+    const div = document.createElement('div');
+    div.className = `user-item ${u.muted? 'muted' : ''}`;
+    div.innerHTML = `${rank.icon} <span style="color:${rank.color}">${u.username}</span>`;
+    div.onclick = (e) => showAdminMenu(e, u);
+    list.appendChild(div);
+  });
+}
+
+function showAdminMenu(e, targetUser) {
+  if(myUser.rank < 3 || targetUser.id === myUser.id) return;
+  const menu = document.getElementById('adminMenu');
+  menu.innerHTML = `
+    <button onclick="adminAction('mute','${targetUser.id}')">${targetUser.muted? 'فك كتم' : 'كتم'}</button>
+    <button onclick="adminAction('kick','${targetUser.id}')">طرد</button>
+    ${myUser.rank >= 4? `<button onclick="adminAction('ban','${targetUser.id}')">باند IP</button>` : ''}
+  `;
+  menu.style.display = 'block';
+  menu.style.left = e.pageX + 'px';
+  menu.style.top = e.pageY + 'px';
+}
+
+function adminAction(action, targetId) {
+  socket.emit(action, targetId);
+  document.getElementById('adminMenu').style.display = 'none';
+}
+
+document.addEventListener('click', () => {
+  document.getElementById('adminMenu').style.display = 'none';
+});
+
+socket.on('userJoined', (u) => socket.emit('system', `${u.username} دخل الشات`));
+socket.on('userLeft', (u) => socket.emit('system', `${u.username} طلع من الشات`));
+</script>
+</body>
+</html>
