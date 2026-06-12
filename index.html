@@ -166,3 +166,225 @@
             display: flex;
             flex-direction: column;
         }
+        .search-chat-box {
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .search-input {
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            background-color: var(--bg-main);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            border-radius: 6px;
+            outline: none;
+        }
+        .chat-list-item {
+            padding: 155px;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .chat-list-item:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+        .avatar-mock {
+            width: 40px;
+            height: 40px;
+            background: var(--syria-green);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        /* منطقة المحادثة المفتوحة */
+        .chat-window {
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-main);
+        }
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .msg-line {
+            background-color: var(--chat-bubble);
+            padding: 10px 15px;
+            border-radius: 8px;
+            max-width: 70%;
+            width: fit-content;
+            font-size: 14px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        /* صندوق الكتابة السفلي للرسائل */
+        .chat-footer {
+            background-color: var(--bg-side);
+            padding: 15px;
+            display: flex;
+            gap: 12px;
+            border-top: 1px solid var(--border-color);
+        }
+        .input-msg-field {
+            flex: 1;
+            background-color: var(--bg-main);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 12px;
+            border-radius: 6px;
+            outline: none;
+        }
+    </style>
+</head>
+<body>
+
+<!-- شاشة القفل والأمان الذكية -->
+<div id="lock-screen">
+    <div class="lock-box">
+        <div class="syria-flag-icon" style="margin: 0 auto 15px auto;">
+            <span class="flag-star">★</span><span class="flag-star">★</span><span class="flag-star">★</span>
+        </div>
+        <h2 style="margin: 0 0 15px 0; font-size: 18px;">تطبيق WhatsApp Syria مغلق</h2>
+        <input type="password" id="pin-input" class="lock-input" placeholder="رمز الدخول (1234)">
+        <br>
+        <button class="action-btn" onclick="checkUnlock()">فتح القفل</button>
+        <button class="theme-btn" style="margin-right: 5px;" onclick="tryBiometrics()">👤 استخدام البصمة/الوجه</button>
+    </div>
+</div>
+
+<!-- راديو خفي للبث المباشر في الخلفية -->
+<audio id="bg-radio" src=""></audio>
+
+<!-- البار العلوي للتطبيق -->
+<div class="app-bar">
+    <div class="logo-area">
+        <div class="syria-flag-icon">
+            <span class="flag-star">★</span><span class="flag-star">★</span><span class="flag-star">★</span>
+        </div>
+        <div class="app-title">WhatsApp Syria</div>
+    </div>
+    
+    <div class="toolbar-options">
+        <!-- راديو الثورة المدمج -->
+        <div class="radio-container">
+            📻 <select id="radio-selector" class="radio-select" onchange="changeRadioStream()">
+                <option value="">اختر إذاعة راديو...</option>
+                <option value="https://al-kul.com">راديو الكل مباشر</option>
+                <option value="https://rozana.fm">راديو روزنة مباشر</option>
+            </select>
+            <button id="radio-toggle-btn" class="action-btn" onclick="toggleRadio()">تشغيل</button>
+        </div>
+
+        <!-- زر اختيار المظهر (داكن / فاتح) المريح للاختيار تلقائياً -->
+        <button class="theme-btn" id="theme-toggle-btn" onclick="toggleTheme()">🌓 مظهر: داكن</button>
+    </div>
+</div>
+
+<!-- التصميم التقسيمي الداخلي للمحادثات وقائمة الأصدقاء -->
+<div class="main-container">
+    <div class="chats-sidebar">
+        <div class="search-chat-box">
+            <input type="text" class="search-input" placeholder="البحث أو بدء محادثة جديدة...">
+        </div>
+        <div class="chat-list-item">
+            <div class="avatar-mock">S</div>
+            <div>
+                <div style="font-weight: bold; font-size: 14px;">مجموعة الدعم العامة</div>
+                <div style="font-size: 12px; opacity: 0.6;">مرحباً بكم في واتساب سوريا...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- شاشة الرسائل المعروضة بشكل الواتساب -->
+    <div class="chat-window">
+        <div class="chat-messages" id="messages-area">
+            <div class="msg-line">🇸🇾 أهلاً بك في تطبيق WhatsApp Syria المطور! قم بمسح كود الـ QR لربط رقمك الحقيقي عند تشغيل السيرفر.</div>
+        </div>
+        <div class="chat-footer">
+            <input type="text" class="input-msg-field" placeholder="اكتب رسالتك هنا...">
+            <button class="action-btn" style="padding: 0 20px; border-radius: 6px;">إرسال</button>
+        </div>
+    </div>
+</div>
+<script>
+    // 1. نظام القفل والتحقق الافتراضي (الرمز المؤقت للتجربة هو 1234)
+    function checkUnlock() {
+        const pin = document.getElementById('pin-input').value;
+        if(pin === "1234") {
+            document.getElementById('lock-screen').style.display = 'none';
+        } else {
+            alert("رمز الدخول خاطئ! جرب 1234");
+        }
+    }
+
+    // محاكاة الاتصال بحماية الهاتف (البصمة وصورة الوجه البيومترية)
+    function tryBiometrics() {
+        if (window.PublicKeyCredential) {
+            alert("تم استدعاء مستشعر الحماية للهاتف... (بصمة الإصبع / Face ID معتمدة بنجاح مجاناً)");
+            document.getElementById('lock-screen').style.display = 'none';
+        } else {
+            alert("جهازك لا يدعم الحماية الحيوية، استخدم الرمز الرقمي.");
+        }
+    }
+
+    // 2. تفعيل التغيير الذكي والاختياري للمظهر (داكن / فاتح)
+    let isDark = true;
+    function toggleTheme() {
+        isDark = !isDark;
+        const btn = document.getElementById('theme-toggle-btn');
+        if(isDark) {
+            document.body.classList.remove('light-theme');
+            btn.innerHTML = "🌓 مظهر: داكن";
+        } else {
+            document.body.classList.add('light-theme');
+            btn.innerHTML = "🌓 مظهر: فاتح";
+        }
+    }
+
+    // 3. إدارة الراديو السوري المدمج وتشغيله في الخلفية
+    const radioAudio = document.getElementById('bg-radio');
+    let isRadioPlaying = false;
+
+    function changeRadioStream() {
+        const selector = document.getElementById('radio-selector');
+        radioAudio.src = selector.value;
+        if(isRadioPlaying) {
+            radioAudio.play();
+        }
+    }
+
+    function toggleRadio() {
+        const btn = document.getElementById('radio-toggle-btn');
+        const selector = document.getElementById('radio-selector');
+        
+        if(!selector.value) {
+            alert("الرجاء اختيار إذاعة راديو أولاً من القائمة!");
+            return;
+        }
+
+        if(!isRadioPlaying) {
+            radioAudio.play().then(() => {
+                isRadioPlaying = true;
+                btn.innerHTML = "إيقاف";
+                btn.style.background = "#cc0000";
+            }).catch(e => alert("عذراً، محطة البث غير متوفرة حالياً، جرب إذاعة أخرى."));
+        } else {
+            radioAudio.pause();
+            isRadioPlaying = false;
+            btn.innerHTML = "تشغيل";
+            btn.style.background = "var(--syria-green)";
+        }
+    }
+</script>
+</body>
+</html>
